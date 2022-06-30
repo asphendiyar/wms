@@ -1,0 +1,40 @@
+stages:
+- build-and-dockerize
+- deploy
+
+build-and-dockerize-stage:
+  only:
+    refs:
+    - stage
+  stage: build-and-dockerize
+  before_script:
+  - wget -qO- https://raw.githubusercontent.com/creationix/nvm/v0.34.0/install.sh | bash #install nvm
+  - export NVM_DIR="$HOME/.nvm" && . "$NVM_DIR/nvm.sh" --no-use #load nvm
+  - eval "[ -f .nvmrc ] && nvm install || nvm install stable " #install node
+  - nvm use v14.17.6
+  - node -v
+  script:
+  - npm install npm@8.1.0
+  - npm install
+  - CI=false npm run build
+  - rm -rf deployment/stage/nginx/www/html/*
+  - mv build/* deployment/stage/nginx/www/html/
+  - cd deployment/stage/
+  - docker-compose build
+  - docker login "https://harbor.technodom.kz" -u "harbor_wms" -p "8YQMJDFY6tHU7ytE"
+  - docker tag wms-ui:stage harbor.technodom.kz/wms/wms-ui:stage
+  - docker push harbor.technodom.kz/wms/wms-ui:stage
+  - npm install npm@6.14.15
+  - nvm use default
+
+deploy-stage:
+  only:
+    refs:
+    - stage
+  stage: deploy
+
+  script:
+  - cd deployment/stage/
+  - kubectl config use-context wms-user-stage-context
+  - kubectl delete  deployments --ignore-not-found=true wms-ui-deployment
+  - kubectl apply -f wms-ui-deployment.yaml
